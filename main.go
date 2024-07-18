@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sdecu/internal/pokeapi"
 	"io"
 	"net/http"
 	"os"
