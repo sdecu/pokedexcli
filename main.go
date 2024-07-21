@@ -48,6 +48,7 @@ func scanner() {
 				fmt.Println("map: Lists the previous 20 location areas")
 				fmt.Println("explore: List all possible encounters for a given location 'explore <locationName>'")
 				fmt.Println("catch: attempt to catch a pokemon 'catch <pokemonName>'")
+				fmt.Println("inspect: inspect a pokemon to see its stats if you have caught it before 'inspect <pokemonName>'")
 				fmt.Println("exit: Exit the Pokedex")
 				return nil
 			},
@@ -90,6 +91,13 @@ func scanner() {
 				return catch(name)
 			},
 		},
+		"inspect": {
+			name:        "inspect",
+			description: "tries to inspect a pokemon when passed a pokemon name",
+			callback: func(name string) error {
+				return inspect(name)
+			},
+		},
 	}
 
 	for {
@@ -111,7 +119,9 @@ func scanner() {
 
 		if cmd, ok := commands[commandName]; ok {
 			var err error
-			if commandName == "explore" || commandName == "catch" {
+			if commandName == "explore" ||
+				commandName == "catch" ||
+				commandName == "inspect" {
 				if args == "" {
 					fmt.Println("Please provide a location to explore")
 					continue
