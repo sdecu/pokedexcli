@@ -5,11 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/sdecu/internal/pokeapi"
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"time"
+
+	"github.com/sdecu/pokedexcli/internal/pokecache"
 )
+
+var cache *pokecache.Cache
+var pokedex = make(map[string]pokemonInfo)
+
+func init() {
+	cache = pokecache.NewCache(5 * time.Minute)
+}
 
 func main() {
 	scanner()
@@ -35,6 +45,9 @@ func scanner() {
 				fmt.Println("Usage:")
 				fmt.Println("\nhelp: Displays a help message")
 				fmt.Println("map: Lists the next 20 location areas")
+				fmt.Println("map: Lists the previous 20 location areas")
+				fmt.Println("explore: List all possible encounters for a given location 'explore <locationName>'")
+				fmt.Println("catch: attempt to catch a pokemon 'catch <pokemonName>'")
 				fmt.Println("exit: Exit the Pokedex")
 				return nil
 			},
@@ -63,6 +76,20 @@ func scanner() {
 				return nil
 			},
 		},
+		"explore": {
+			name:        "explore",
+			description: "shows a list of all the pokemon in a given area",
+			callback: func(location string) error {
+				return explore(location)
+			},
+		},
+		"catch": {
+			name:        "catch",
+			description: "tries to catch a pokemon when passed a pokemon name",
+			callback: func(name string) error {
+				return catch(name)
+			},
+		},
 	}
 
 	for {
@@ -74,8 +101,25 @@ func scanner() {
 			break
 		}
 
-		if cmd, ok := commands[input]; ok {
-			err := cmd.callback(current)
+		words := strings.Fields(input)
+		if len(words) == 0 {
+			continue
+		}
+
+		commandName := words[0]
+		args := strings.Join(words[1:], " ")
+
+		if cmd, ok := commands[commandName]; ok {
+			var err error
+			if commandName == "explore" || commandName == "catch" {
+				if args == "" {
+					fmt.Println("Please provide a location to explore")
+					continue
+				}
+				err = cmd.callback(args)
+			} else {
+				err = cmd.callback(current)
+			}
 			if err != nil {
 				fmt.Println("Error:", err)
 			}
@@ -111,37 +155,107 @@ func parseJSON(url string) (locations, error) {
 }
 
 func maps(url string) (string, error) {
+	if val, ok := cache.Get(url); ok {
+		var cachedLocation locations
+		err := json.Unmarshal(val, &cachedLocation)
+		if err != nil {
+			return url, nil
+		}
+		for _, place := range cachedLocation.Results {
+			fmt.Println(place.Name)
+		}
+		return cachedLocation.Next, nil
+	}
+
 	location, err := parseJSON(url)
 	if err != nil {
-		return "", err
+		return url, err
 	}
 
 	for _, place := range location.Results {
 		fmt.Println(place.Name)
 	}
+	resultBytes, err := json.Marshal(location)
+	if err != nil {
+		return url, err
+	}
+	cache.Add(url, resultBytes)
 
 	return location.Next, nil
 }
 
 func mapb(url string) (string, error) {
-	if url == "https://pokeapi.co/api/v2/location-area" {
-		return maps(url)
+	if next, ok := cache.Get(url); ok {
+		var nextLocation locations
+		err := json.Unmarshal(next, &nextLocation)
+		if err != nil {
+			return useapi(url)
+		}
+
+		if nextLocation.Previous == nil {
+			return useapi(url)
+		}
+
+		cur, ok := cache.Get(*nextLocation.Previous)
+		if !ok {
+			return useapi(url)
+		}
+
+		var currentLocation locations
+		if err := json.Unmarshal(cur, &currentLocation); err != nil {
+			return useapi(url)
+		}
+
+		if currentLocation.Previous == nil {
+			return useapi(url)
+		}
+
+		prev, ok := cache.Get(*currentLocation.Previous)
+		if !ok {
+			return useapi(url)
+		}
+
+		var prevLocation locations
+		if err := json.Unmarshal(prev, &prevLocation); err != nil {
+			return useapi(url)
+		}
+
+		for _, place := range prevLocation.Results {
+			fmt.Println(place.Name)
+		}
+
+		return *nextLocation.Previous, nil
 	}
+	return useapi(url)
+}
+
+func useapi(url string) (string, error) {
+
 	location, err := parseJSON(url)
 	if err != nil {
-		return "", err
-	}
-
-	location, err = parseJSON(*location.Previous)
-	if err != nil {
-		return "", err
+		return url, err
 	}
 
 	if location.Previous == nil {
-		return "", errors.New("you are at the starting location")
+		return url, errors.New("you are at the starting location")
 	}
 
-	return maps(*location.Previous)
+	previousLocation, err := parseJSON(*location.Previous)
+	if err != nil {
+		return url, err
+	}
+
+	for _, place := range previousLocation.Results {
+		fmt.Println(place.Name)
+	}
+
+	resultBytes, err := json.Marshal(previousLocation)
+	if err != nil {
+		return url, err
+	}
+	cache.Add(*location.Previous, resultBytes)
+
+	return *location.Previous, nil
 }
 
 type locations struct {
