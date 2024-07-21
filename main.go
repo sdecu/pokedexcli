@@ -49,6 +49,7 @@ func scanner() {
 				fmt.Println("explore: List all possible encounters for a given location 'explore <locationName>'")
 				fmt.Println("catch: attempt to catch a pokemon 'catch <pokemonName>'")
 				fmt.Println("inspect: inspect a pokemon to see its stats if you have caught it before 'inspect <pokemonName>'")
+				fmt.Println("pokedex: list every pokemon you've caught")
 				fmt.Println("exit: Exit the Pokedex")
 				return nil
 			},
@@ -96,6 +97,14 @@ func scanner() {
 			description: "tries to inspect a pokemon when passed a pokemon name",
 			callback: func(name string) error {
 				return inspect(name)
+			},
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "list every pokemon you've caught",
+			callback: func(name string) error {
+				checkPokedex()
+				return nil
 			},
 		},
 	}
